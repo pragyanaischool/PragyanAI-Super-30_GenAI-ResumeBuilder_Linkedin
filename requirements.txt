@@ -1,0 +1,7 @@
+streamlit
+groq
+langchain
+langchain-community
+langchain-groq
+pymupdf
+fpdf2

@@ -5,7 +5,7 @@ import fitz  # PyMuPDF
 from fpdf import FPDF
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
 
 # --- Constants & Page Config ---
 FONT_FAMILY = "Helvetica"
@@ -18,60 +18,53 @@ st.set_page_config(
 # --- Helper function to safely encode text ---
 def clean_text(text):
     """Sanitizes text for FPDF, removing problematic characters and encoding."""
-    # Ensure input is a string, remove leading/trailing whitespace
     text = str(text).strip()
-    # Replace carriage returns and newlines with a space
     text = text.replace('\r', '').replace('\n', ' ')
-    # Encode to latin-1, replacing unsupported characters
     return text.encode('latin-1', 'replace').decode('latin-1')
 
 # --- PDF Generation Class ---
 
 class PDF(FPDF):
     def header(self):
-        pass # No header
+        pass
 
     def footer(self):
-        pass # No footer
+        pass
+
+    def write_resume_from_markdown(self, markdown_text):
+        """Parses a markdown-like text and formats it into the PDF."""
+        lines = markdown_text.split('\n')
         
-    def add_section_title(self, title):
-        self.set_font(FONT_FAMILY, 'B', 14)
-        self.cell(0, 10, clean_text(title).upper(), 0, 1, 'L')
-        self.ln(2)
+        if lines:
+            name = lines.pop(0).replace('#', '').strip()
+            self.set_font(FONT_FAMILY, 'B', 24)
+            self.cell(0, 10, clean_text(name), 0, 1, 'C')
 
-    def add_body_text(self, text):
-        self.set_font(FONT_FAMILY, '', 11)
-        self.multi_cell(0, 5, clean_text(text))
-        self.ln(4)
+        if lines:
+            contact = lines.pop(0).strip()
+            self.set_font(FONT_FAMILY, '', 10)
+            self.cell(0, 10, clean_text(contact), 0, 1, 'C')
+            self.ln(5)
 
-    def add_experience(self, exp_list):
-        for exp in exp_list:
-            self.set_font(FONT_FAMILY, 'B', 11)
-            title_company = f"{exp.get('title', '')} at {exp.get('company', '')}"
-            self.multi_cell(0, 5, clean_text(title_company))
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
 
-            self.set_font(FONT_FAMILY, 'I', 10)
-            duration = f"{exp.get('duration', '')}"
-            self.multi_cell(0, 5, clean_text(duration))
-            
-            self.set_font(FONT_FAMILY, '', 11)
-            description = str(exp.get('description', '')).replace('•', '*')
-            for point in description.split('*'):
-                point = point.strip()
-                if point:
-                    self.multi_cell(0, 5, clean_text(f"* {point}"))
-            self.ln(3)
-
-    def add_education(self, edu_list):
-        for edu in edu_list:
-            self.set_font(FONT_FAMILY, 'B', 11)
-            institution = edu.get('institution', '')
-            self.multi_cell(0, 5, clean_text(institution))
-
-            self.set_font(FONT_FAMILY, '', 11)
-            degree_duration = f"{edu.get('degree', '')} ({edu.get('duration', '')})"
-            self.multi_cell(0, 5, clean_text(degree_duration))
-            self.ln(3)
+            if line.startswith('## '):
+                self.ln(4)
+                self.set_font(FONT_FAMILY, 'B', 14)
+                self.cell(0, 10, clean_text(line.replace('##', '').strip()).upper(), 0, 1, 'L')
+                self.ln(2)
+            elif line.startswith('**'):
+                self.set_font(FONT_FAMILY, 'B', 11)
+                self.multi_cell(0, 5, clean_text(line.replace('**', '')))
+            elif line.startswith('* '):
+                self.set_font(FONT_FAMILY, '', 11)
+                self.multi_cell(0, 5, clean_text(line))
+            else:
+                self.set_font(FONT_FAMILY, 'I', 10)
+                self.multi_cell(0, 5, clean_text(line))
 
 # --- Core Functions ---
 
@@ -123,6 +116,31 @@ def customize_resume_for_job(_llm, resume_data, job_description):
     response = chain.invoke({"resume": json.dumps(resume_data), "job_post": job_description})
     return response
 
+@st.cache_data(show_spinner="Formatting your resume for download...")
+def generate_markdown_resume(_llm, resume_data):
+    """Uses LLM to convert resume JSON into a clean Markdown format."""
+    parser = StrOutputParser()
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", """You are a professional resume typesetter. Your task is to convert the following resume data from JSON format into a clean, well-structured Markdown document.
+
+Follow these formatting rules STRICTLY:
+- The very first line MUST be the candidate's name, preceded by '# '.
+- The second line MUST be the contact information, formatted as a single line (e.g., 'email | phone | linkedin').
+- Section titles (like 'Professional Summary', 'Work Experience') MUST be preceded by '## '.
+- For each experience entry, the job title and company MUST be on one line, in bold (e.g., '**Senior Developer at Tech Corp**').
+- The duration for each job or education MUST be on its own line, immediately following the title line.
+- Each point in a job description MUST start with '* '.
+- For education, the institution MUST be in bold (e.g., '**State University**').
+- The degree and duration for education should be on the next line.
+- The skills should be a single comma-separated line.
+- Do not add any extra text, comments, or explanations. Only output the Markdown resume."""),
+        ("user", "Here is the resume data:\n\n{resume_json}"),
+    ])
+    
+    chain = prompt | _llm | parser
+    response = chain.invoke({"resume_json": json.dumps(resume_data)})
+    return response
+
 # --- Streamlit UI ---
 
 st.title("📄 AI Resume Co-pilot")
@@ -131,6 +149,8 @@ st.write("Generate a professional resume from your LinkedIn profile or existing 
 # --- Session State Initialization ---
 if 'resume_data' not in st.session_state:
     st.session_state.resume_data = None
+if 'markdown_resume' not in st.session_state:
+    st.session_state.markdown_resume = None
 
 # --- Sidebar for Inputs ---
 with st.sidebar:
@@ -161,6 +181,7 @@ with st.sidebar:
 
 # --- Main Content Area ---
 if generate_button:
+    st.session_state.markdown_resume = None # Clear old markdown on new generation
     if not groq_api_key:
         st.error("Please enter your GROQ API key.")
     elif not uploaded_pdf:
@@ -168,14 +189,10 @@ if generate_button:
     else:
         llm = ChatGroq(temperature=0.2, groq_api_key=groq_api_key, model_name="llama3-70b-8192")
         
-        # 1. Extract text from PDF
         document_text = extract_text_from_pdf(uploaded_pdf)
         
         if document_text:
-            # 2. Generate base resume
             resume_json = generate_resume_from_text(llm, document_text)
-            
-            # 3. Customize if job description is provided
             if job_description.strip():
                 final_resume_json = customize_resume_for_job(llm, resume_json, job_description)
             else:
@@ -189,8 +206,6 @@ if st.session_state.resume_data:
     
     resume = st.session_state.resume_data
     
-    # --- Editable Fields ---
-    # We use keys to ensure widgets are re-rendered correctly
     resume['name'] = st.text_input("Name", resume.get('name', ''), key='name')
     
     contact_info = resume.get('contact', {})
@@ -220,44 +235,42 @@ if st.session_state.resume_data:
             edu['degree'] = st.text_input("Degree/Field of Study", edu.get('degree', ''), key=f"edu_degree_{i}")
             edu['duration'] = st.text_input("Duration", edu.get('duration', ''), key=f"edu_duration_{i}")
 
-    resume['skills'] = st.text_area("Skills (comma-separated)", ", ".join(resume.get('skills', [])), key='skills')
+    skills_list = resume.get('skills', [])
+    if isinstance(skills_list, list):
+        skills_str = ", ".join(skills_list)
+    else:
+        skills_str = skills_list
+    resume['skills'] = st.text_area("Skills (comma-separated)", skills_str, key='skills')
 
     # --- PDF Download Button ---
     st.header("📥 Download Your Resume")
     
-    pdf = PDF()
-    pdf.add_page()
-    
-    # Header section
-    pdf.set_font(FONT_FAMILY, 'B', 24)
-    pdf.cell(0, 10, clean_text(resume.get('name', 'Your Name')), 0, 1, 'C')
+    if st.button("Prepare PDF for Download"):
+        if not groq_api_key:
+            st.error("Please enter your GROQ API key in the sidebar to format and download.")
+        else:
+            llm = ChatGroq(temperature=0.2, groq_api_key=groq_api_key, model_name="llama3-70b-8192")
+            
+            # Convert skills back to a list if it's a string
+            if isinstance(resume['skills'], str):
+                resume['skills'] = [skill.strip() for skill in resume['skills'].split(',')]
 
-    pdf.set_font(FONT_FAMILY, '', 10)
-    contact_str = f"{resume['contact'].get('email', '')} | {resume['contact'].get('phone', '')} | {resume['contact'].get('linkedin_url', '')}"
-    pdf.cell(0, 10, clean_text(contact_str), 0, 1, 'C')
-    pdf.ln(5)
+            markdown_resume = generate_markdown_resume(llm, resume)
+            st.session_state.markdown_resume = markdown_resume
 
-    # Summary
-    pdf.add_section_title('Professional Summary')
-    pdf.add_body_text(resume.get('summary', ''))
+    if st.session_state.markdown_resume:
+        st.subheader("Formatted Resume Preview")
+        st.markdown(st.session_state.markdown_resume)
 
-    # Experience
-    pdf.add_section_title('Work Experience')
-    pdf.add_experience(resume.get('experience', []))
+        pdf = PDF()
+        pdf.add_page()
+        pdf.write_resume_from_markdown(st.session_state.markdown_resume)
+        
+        pdf_output = pdf.output(dest='S').encode('latin-1')
 
-    # Education
-    pdf.add_section_title('Education')
-    pdf.add_education(resume.get('education', []))
-
-    # Skills
-    pdf.add_section_title('Skills')
-    pdf.add_body_text(", ".join(resume.get('skills', []) if isinstance(resume.get('skills'), list) else resume.get('skills').split(', ')))
-
-    pdf_output = pdf.output(dest='S').encode('latin-1')
-
-    st.download_button(
-        label="Download Resume as PDF",
-        data=pdf_output,
-        file_name=f"{resume.get('name', 'resume').replace(' ', '_').lower()}_resume.pdf",
-        mime="application/pdf"
-    )
+        st.download_button(
+            label="✅ Click to Download PDF",
+            data=pdf_output,
+            file_name=f"{st.session_state.resume_data.get('name', 'resume').replace(' ', '_').lower()}_resume.pdf",
+            mime="application/pdf"
+        )

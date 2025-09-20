@@ -105,7 +105,10 @@ def generate_resume_from_text(_llm, text):
     parser = JsonOutputParser()
     prompt = ChatPromptTemplate.from_messages([
         ("system", """You are an expert resume writer. Your task is to analyze the provided text from a LinkedIn profile or an existing resume and extract the user's information into a structured JSON format. 
-         The JSON object should have the following keys: 'name', 'contact' (as a dictionary with 'email', 'phone', 'linkedin_url'), 'summary', 'experience' (as a list of objects, each with 'title', 'company', 'duration', and 'description'), 'education' (a list of objects with 'institution', 'degree', 'duration'), and 'skills' (a list of strings).
+         The JSON object must have the following keys: 'name', 'contact' (as a dictionary with 'email', 'phone', 'linkedin_url'), 'summary', 'experience' (as a list of objects, each with 'title', 'company', 'duration', and 'description'), 'education' (a list of objects with 'institution', 'degree', 'duration'), and 'skills' (a list of strings).
+         Pay close attention to the 'Education' and 'Skills' sections to ensure they are parsed correctly and not mixed.
+         - For 'education': An entry should only be included if it is clearly an educational institution, degree, or certification. For entries like fellowships or non-degree programs, parse the main line as 'degree' and the organization as 'institution'. If duration is present, extract it.
+         - For 'skills': Extract only the specific skills, which are often listed under a 'Skills' heading or similar. Parse a comma-separated list into a JSON list of individual skill strings.
          Clean and format the text professionally. For job descriptions, convert paragraphs into concise bullet points, each starting with '*'. Infer missing details logically if necessary, but don't invent information that isn't suggested by the text."""),
         ("user", "Here is the text from the document:\n\n{document_text}"),
         ("system", "Please provide the output in JSON format only.")

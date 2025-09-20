@@ -19,10 +19,11 @@ st.set_page_config(
 def clean_text(text):
     """
     Sanitizes text for FPDF by replacing special Unicode characters with ASCII
-    equivalents and handling encoding.
+    equivalents and handling encoding. This is a more robust version.
     """
     text = str(text).strip()
     replacements = {
+        '\u00A0': ' ',  # Non-breaking space
         '\r': '',
         '\n': ' ',
         '“': '"',

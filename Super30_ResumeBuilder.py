@@ -164,7 +164,7 @@ if generate_button:
     elif not uploaded_pdf:
         st.error("Please upload your profile or resume PDF.")
     else:
-        llm = ChatGroq(temperature=0.2, groq_api_key=groq_api_key, model_name="llama3-70b-8192")
+        llm = ChatGroq(temperature=0.2, groq_api_key=groq_api_key, model_name="openai/gpt-oss-20b")
         
         # 1. Extract text from PDF
         document_text = extract_text_from_pdf(uploaded_pdf)

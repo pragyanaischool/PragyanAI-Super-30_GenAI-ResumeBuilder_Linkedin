@@ -249,7 +249,7 @@ if st.session_state.resume_data:
         if not groq_api_key:
             st.error("Please enter your GROQ API key in the sidebar to format and download.")
         else:
-            llm = ChatGroq(temperature=0.2, groq_api_key=groq_api_key, model_name="llama3-70b-8192")
+            llm = ChatGroq(temperature=0.2, groq_api_key=groq_api_key, model_name="openai/gpt-oss-20b")
             
             # Convert skills back to a list if it's a string
             if isinstance(resume['skills'], str):

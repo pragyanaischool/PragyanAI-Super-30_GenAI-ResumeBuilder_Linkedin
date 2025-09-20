@@ -2,88 +2,16 @@ import streamlit as st
 import os
 import json
 import fitz  # PyMuPDF
-from fpdf import FPDF
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
 
 # --- Constants & Page Config ---
-FONT_FAMILY = "Helvetica"
 st.set_page_config(
     page_title="AI Resume Co-pilot",
     page_icon="📄",
     layout="wide"
 )
-
-# --- Helper function to safely encode text ---
-def clean_text(text):
-    """
-    Sanitizes text for FPDF by replacing special Unicode characters with ASCII
-    equivalents and handling encoding. This is a more robust version.
-    """
-    text = str(text).strip()
-    replacements = {
-        '\u00A0': ' ',  # Non-breaking space
-        '\r': '',
-        '\n': ' ',
-        '“': '"',
-        '”': '"',
-        '‘': "'",
-        '’': "'",
-        '–': '-',  # En dash
-        '—': '-',  # Em dash
-        '‑': '-',  # Non-breaking hyphen
-        '•': '*'   # Bullet
-    }
-    for old, new in replacements.items():
-        text = text.replace(old, new)
-    
-    # Encode to latin-1, replacing any remaining unsupported characters
-    return text.encode('latin-1', 'replace').decode('latin-1')
-
-# --- PDF Generation Class ---
-
-class PDF(FPDF):
-    def header(self):
-        pass
-
-    def footer(self):
-        pass
-
-    def write_resume_from_markdown(self, markdown_text):
-        """Parses a markdown-like text and formats it into the PDF."""
-        lines = markdown_text.split('\n')
-        
-        if lines:
-            name = lines.pop(0).replace('#', '').strip()
-            self.set_font(FONT_FAMILY, 'B', 24)
-            self.cell(0, 10, clean_text(name), 0, 1, 'C')
-
-        if lines:
-            contact = lines.pop(0).strip()
-            self.set_font(FONT_FAMILY, '', 10)
-            self.cell(0, 10, clean_text(contact), 0, 1, 'C')
-            self.ln(5)
-
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-
-            if line.startswith('## '):
-                self.ln(4)
-                self.set_font(FONT_FAMILY, 'B', 14)
-                self.cell(0, 10, clean_text(line.replace('##', '').strip()).upper(), 0, 1, 'L')
-                self.ln(2)
-            elif line.startswith('**'):
-                self.set_font(FONT_FAMILY, 'B', 11)
-                self.multi_cell(0, 5, clean_text(line.replace('**', '')))
-            elif line.startswith('* '):
-                self.set_font(FONT_FAMILY, '', 11)
-                self.multi_cell(0, 5, clean_text(line))
-            else:
-                self.set_font(FONT_FAMILY, 'I', 10)
-                self.multi_cell(0, 5, clean_text(line))
 
 # --- Core Functions ---
 
@@ -242,6 +170,7 @@ with st.sidebar:
 # --- Main Content Area ---
 if generate_button:
     st.session_state.markdown_resume = None # Clear old markdown on new generation
+    st.session_state.cover_letter = None  # Clear old cover letter
     if not groq_api_key:
         st.error("Please enter your GROQ API key.")
     elif not uploaded_pdf:
@@ -339,7 +268,7 @@ if st.session_state.resume_data:
         st.subheader("Generated Cover Letter")
         st.session_state.cover_letter = st.text_area("Edit your cover letter:", value=st.session_state.cover_letter, height=400)
 
-    # --- PDF & Markdown Download Buttons ---
+    # --- Markdown Download Buttons ---
     st.header("📥 Download Your Documents")
     
     if st.button("Prepare Documents for Download"):
@@ -358,20 +287,8 @@ if st.session_state.resume_data:
         st.subheader("Formatted Resume Preview")
         st.markdown(st.session_state.markdown_resume)
 
-        pdf = PDF()
-        pdf.add_page()
-        pdf.write_resume_from_markdown(st.session_state.markdown_resume)
-        pdf_output = pdf.output(dest='S').encode('latin-1')
-        
-        dl_col1, dl_col2, dl_col3 = st.columns(3)
+        dl_col1, dl_col2 = st.columns(2)
         with dl_col1:
-            st.download_button(
-                label="📄 Download Resume as PDF",
-                data=pdf_output,
-                file_name=f"{st.session_state.resume_data.get('name', 'resume').replace(' ', '_').lower()}_resume.pdf",
-                mime="application/pdf"
-            )
-        with dl_col2:
             st.download_button(
                 label="📝 Download Resume as Markdown",
                 data=st.session_state.markdown_resume,
@@ -379,7 +296,7 @@ if st.session_state.resume_data:
                 mime="text/markdown"
             )
         if st.session_state.cover_letter:
-            with dl_col3:
+            with dl_col2:
                 st.download_button(
                     label="✉️ Download Cover Letter",
                     data=st.session_state.cover_letter,

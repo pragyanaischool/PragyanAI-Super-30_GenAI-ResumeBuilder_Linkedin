@@ -8,7 +8,7 @@ from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
 
 # --- Constants & Page Config ---
 st.set_page_config(
-    page_title="AI Resume Co-pilot",
+    page_title="PragyanAI - AI Resume Co-pilot",
     page_icon="📄",
     layout="wide"
 )
@@ -129,7 +129,7 @@ def generate_cover_letter(_llm, resume_data, job_description):
 
 # --- Streamlit UI ---
 
-st.title("📄 AI Resume Co-pilot")
+st.title("📄 PragyanAI - AI Resume Co-pilot")
 st.write("Generate a professional resume from your LinkedIn profile or existing resume and tailor it to a specific job in seconds.")
 
 # --- Session State Initialization ---

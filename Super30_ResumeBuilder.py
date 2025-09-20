@@ -163,6 +163,42 @@ Follow these formatting rules STRICTLY:
     response = chain.invoke({"resume_json": json.dumps(resume_data)})
     return response
 
+@st.cache_data(show_spinner="Rewriting your resume for maximum impact...")
+def rewrite_resume_for_impact(_llm, resume_data):
+    """Uses LLM to rewrite the resume content to be more effective."""
+    parser = JsonOutputParser()
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", """You are a world-class career coach and resume writer. You will be given a resume in JSON format. Your task is to rewrite the 'summary' and the 'description' for each 'experience' entry to be more impactful, professional, and achievement-oriented.
+         - For the summary: Craft a dynamic and compelling professional summary that immediately grabs the reader's attention and highlights the candidate's unique value proposition.
+         - For experience descriptions: Transform the descriptions from a list of duties into a showcase of accomplishments. Use the STAR (Situation, Task, Action, Result) method where possible. Start each bullet point with a strong action verb. Quantify results with numbers, percentages, or other metrics whenever you can infer them or suggest placeholders (e.g., 'Increased efficiency by over 25%'). Ensure all bullet points still start with '*'.
+         - Do not change any other part of the resume JSON. Return the entire modified JSON object."""),
+        ("user", "Here is the resume to rewrite:\n\n{resume}"),
+        ("system", "Please provide the rewritten resume in JSON format only.")
+    ])
+    
+    chain = prompt | _llm | parser
+    response = chain.invoke({"resume": json.dumps(resume_data)})
+    return response
+
+@st.cache_data(show_spinner="Generating a draft cover letter...")
+def generate_cover_letter(_llm, resume_data, job_description):
+    """Uses LLM to generate a cover letter."""
+    parser = StrOutputParser()
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", """You are a professional career writer. Your task is to write a compelling and professional cover letter based on a candidate's resume and a specific job description.
+        The cover letter should be well-structured, concise, and tailored to the job.
+        - **Introduction:** Start with a strong opening that states the position being applied for and where it was seen.
+        - **Body Paragraphs:** Create 2-3 paragraphs that connect the candidate's key experiences and skills from their resume to the specific requirements listed in the job description. Do not just repeat the resume; explain *how* their experience is relevant.
+        - **Conclusion:** End with a strong closing paragraph that reiterates interest in the role and includes a clear call to action (e.g., expressing eagerness to discuss their qualifications in an interview).
+        - **Formatting:** Use professional and friendly language. The output should be a single block of text formatted in Markdown.
+        """),
+        ("user", "Here is the candidate's resume:\n\n{resume}\n\nHere is the job description they are applying for:\n\n{job_post}"),
+    ])
+
+    chain = prompt | _llm | parser
+    response = chain.invoke({"resume": json.dumps(resume_data), "job_post": job_description})
+    return response
+
 # --- Streamlit UI ---
 
 st.title("📄 AI Resume Co-pilot")
@@ -173,6 +209,8 @@ if 'resume_data' not in st.session_state:
     st.session_state.resume_data = None
 if 'markdown_resume' not in st.session_state:
     st.session_state.markdown_resume = None
+if 'cover_letter' not in st.session_state:
+    st.session_state.cover_letter = None
 
 # --- Sidebar for Inputs ---
 with st.sidebar:
@@ -264,16 +302,52 @@ if st.session_state.resume_data:
         skills_str = skills_list
     resume['skills'] = st.text_area("Skills (comma-separated)", skills_str, key='skills')
 
-    # --- PDF Download Button ---
-    st.header("📥 Download Your Resume")
+    # --- AI Writing Assistants ---
+    st.header("✨ AI Writing Assistants")
+    st.write("Use AI to further enhance your resume and create a cover letter.")
     
-    if st.button("Prepare PDF for Download"):
+    assist_col1, assist_col2 = st.columns(2)
+    with assist_col1:
+        if st.button("🚀 Rewrite Resume for Impact"):
+            if not groq_api_key:
+                st.error("Please enter your GROQ API key in the sidebar.")
+            else:
+                llm = ChatGroq(temperature=0.4, groq_api_key=groq_api_key, model_name="llama-3.3-70b-versatile")
+                if isinstance(st.session_state.resume_data['skills'], str):
+                    st.session_state.resume_data['skills'] = [skill.strip() for skill in st.session_state.resume_data['skills'].split(',')]
+                
+                rewritten_resume_json = rewrite_resume_for_impact(llm, st.session_state.resume_data)
+                st.session_state.resume_data = rewritten_resume_json
+                st.success("Resume rewritten! The fields above have been updated with the new content.")
+                st.rerun()
+
+    with assist_col2:
+        if st.button("✉️ Generate Cover Letter"):
+            if not groq_api_key:
+                st.error("Please enter your GROQ API key in the sidebar.")
+            elif not job_description.strip():
+                st.error("Please provide a job description in the sidebar to generate a cover letter.")
+            else:
+                llm = ChatGroq(temperature=0.5, groq_api_key=groq_api_key, model_name="llama-3.3-70b-versatile")
+                if isinstance(st.session_state.resume_data['skills'], str):
+                    st.session_state.resume_data['skills'] = [skill.strip() for skill in st.session_state.resume_data['skills'].split(',')]
+
+                cover_letter_text = generate_cover_letter(llm, st.session_state.resume_data, job_description)
+                st.session_state.cover_letter = cover_letter_text
+    
+    if st.session_state.cover_letter:
+        st.subheader("Generated Cover Letter")
+        st.session_state.cover_letter = st.text_area("Edit your cover letter:", value=st.session_state.cover_letter, height=400)
+
+    # --- PDF & Markdown Download Buttons ---
+    st.header("📥 Download Your Documents")
+    
+    if st.button("Prepare Documents for Download"):
         if not groq_api_key:
             st.error("Please enter your GROQ API key in the sidebar to format and download.")
         else:
             llm = ChatGroq(temperature=0.2, groq_api_key=groq_api_key, model_name="llama-3.3-70b-versatile")
             
-            # Convert skills back to a list if it's a string
             if isinstance(resume['skills'], str):
                 resume['skills'] = [skill.strip() for skill in resume['skills'].split(',')]
 
@@ -287,12 +361,28 @@ if st.session_state.resume_data:
         pdf = PDF()
         pdf.add_page()
         pdf.write_resume_from_markdown(st.session_state.markdown_resume)
-        
         pdf_output = pdf.output(dest='S').encode('latin-1')
-
-        st.download_button(
-            label="✅ Click to Download PDF",
-            data=pdf_output,
-            file_name=f"{st.session_state.resume_data.get('name', 'resume').replace(' ', '_').lower()}_resume.pdf",
-            mime="application/pdf"
-        )
+        
+        dl_col1, dl_col2, dl_col3 = st.columns(3)
+        with dl_col1:
+            st.download_button(
+                label="📄 Download Resume as PDF",
+                data=pdf_output,
+                file_name=f"{st.session_state.resume_data.get('name', 'resume').replace(' ', '_').lower()}_resume.pdf",
+                mime="application/pdf"
+            )
+        with dl_col2:
+            st.download_button(
+                label="📝 Download Resume as Markdown",
+                data=st.session_state.markdown_resume,
+                file_name=f"{st.session_state.resume_data.get('name', 'resume').replace(' ', '_').lower()}_resume.md",
+                mime="text/markdown"
+            )
+        if st.session_state.cover_letter:
+            with dl_col3:
+                st.download_button(
+                    label="✉️ Download Cover Letter",
+                    data=st.session_state.cover_letter,
+                    file_name=f"{st.session_state.resume_data.get('name', 'resume').replace(' ', '_').lower()}_cover_letter.md",
+                    mime="text/markdown"
+                )

@@ -17,9 +17,27 @@ st.set_page_config(
 
 # --- Helper function to safely encode text ---
 def clean_text(text):
-    """Sanitizes text for FPDF, removing problematic characters and encoding."""
+    """
+    Sanitizes text for FPDF by replacing special Unicode characters with ASCII
+    equivalents and handling encoding.
+    """
     text = str(text).strip()
-    text = text.replace('\r', '').replace('\n', ' ')
+    replacements = {
+        '\r': '',
+        '\n': ' ',
+        '“': '"',
+        '”': '"',
+        '‘': "'",
+        '’': "'",
+        '–': '-',  # En dash
+        '—': '-',  # Em dash
+        '‑': '-',  # Non-breaking hyphen
+        '•': '*'   # Bullet
+    }
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+    
+    # Encode to latin-1, replacing any remaining unsupported characters
     return text.encode('latin-1', 'replace').decode('latin-1')
 
 # --- PDF Generation Class ---
@@ -187,7 +205,7 @@ if generate_button:
     elif not uploaded_pdf:
         st.error("Please upload your profile or resume PDF.")
     else:
-        llm = ChatGroq(temperature=0.2, groq_api_key=groq_api_key, model_name="openai/gpt-oss-20b")
+        llm = ChatGroq(temperature=0.2, groq_api_key=groq_api_key, model_name="llama-3.3-70b-versatile")
         
         document_text = extract_text_from_pdf(uploaded_pdf)
         
@@ -249,7 +267,7 @@ if st.session_state.resume_data:
         if not groq_api_key:
             st.error("Please enter your GROQ API key in the sidebar to format and download.")
         else:
-            llm = ChatGroq(temperature=0.2, groq_api_key=groq_api_key, model_name="openai/gpt-oss-20b")
+            llm = ChatGroq(temperature=0.2, groq_api_key=groq_api_key, model_name="llama-3.3-70b-versatile")
             
             # Convert skills back to a list if it's a string
             if isinstance(resume['skills'], str):

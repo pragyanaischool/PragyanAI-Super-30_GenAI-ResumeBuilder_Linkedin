@@ -17,8 +17,13 @@ st.set_page_config(
 
 # --- Helper function to safely encode text ---
 def clean_text(text):
-    """Encodes text to latin-1, replacing unsupported characters."""
-    return str(text).replace('\r', '').encode('latin-1', 'replace').decode('latin-1')
+    """Sanitizes text for FPDF, removing problematic characters and encoding."""
+    # Ensure input is a string, remove leading/trailing whitespace
+    text = str(text).strip()
+    # Replace carriage returns and newlines with a space
+    text = text.replace('\r', '').replace('\n', ' ')
+    # Encode to latin-1, replacing unsupported characters
+    return text.encode('latin-1', 'replace').decode('latin-1')
 
 # --- PDF Generation Class ---
 
@@ -161,7 +166,7 @@ if generate_button:
     elif not uploaded_pdf:
         st.error("Please upload your profile or resume PDF.")
     else:
-        llm = ChatGroq(temperature=0.2, groq_api_key=groq_api_key, model_name="openai/gpt-oss-20b")
+        llm = ChatGroq(temperature=0.2, groq_api_key=groq_api_key, model_name="llama3-70b-8192")
         
         # 1. Extract text from PDF
         document_text = extract_text_from_pdf(uploaded_pdf)
@@ -256,4 +261,3 @@ if st.session_state.resume_data:
         file_name=f"{resume.get('name', 'resume').replace(' ', '_').lower()}_resume.pdf",
         mime="application/pdf"
     )
-    

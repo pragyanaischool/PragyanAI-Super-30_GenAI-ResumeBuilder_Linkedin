@@ -49,10 +49,12 @@ class PDF(FPDF):
             self.multi_cell(0, 5, safe_duration)
             
             self.set_font(FONT_FAMILY, '', 11)
-            # Handle bullet points in description
-            for point in exp.get('description', '').split('• '):
-                if point.strip():
-                    safe_point = f"• {point.strip()}".encode('latin-1', 'replace').decode('latin-1')
+            # Handle bullet points in description, replacing special characters
+            description = exp.get('description', '').replace('•', '*')
+            for point in description.split('*'):
+                point = point.strip()
+                if point:
+                    safe_point = f"* {point}".encode('latin-1', 'replace').decode('latin-1')
                     self.multi_cell(0, 5, safe_point)
             self.ln(3)
 
@@ -91,7 +93,7 @@ def generate_resume_from_text(_llm, text):
     prompt = ChatPromptTemplate.from_messages([
         ("system", """You are an expert resume writer. Your task is to analyze the provided text from a LinkedIn profile or an existing resume and extract the user's information into a structured JSON format. 
          The JSON object should have the following keys: 'name', 'contact' (as a dictionary with 'email', 'phone', 'linkedin_url'), 'summary', 'experience' (as a list of objects, each with 'title', 'company', 'duration', and 'description'), 'education' (a list of objects with 'institution', 'degree', 'duration'), and 'skills' (a list of strings).
-         Clean and format the text professionally. For job descriptions, convert paragraphs into concise bullet points, each starting with '•'. Infer missing details logically if necessary, but don't invent information that isn't suggested by the text."""),
+         Clean and format the text professionally. For job descriptions, convert paragraphs into concise bullet points, each starting with '*'. Infer missing details logically if necessary, but don't invent information that isn't suggested by the text."""),
         ("user", "Here is the text from the document:\n\n{document_text}"),
         ("system", "Please provide the output in JSON format only.")
     ])
@@ -109,7 +111,7 @@ def customize_resume_for_job(_llm, resume_data, job_description):
          Your task is to analyze the job description and strategically rewrite the 'summary' and the 'description' for each 'experience' entry in the resume. 
          The goal is to align the candidate's skills and experience with the requirements of the job.
          - For the summary: Create a powerful, concise professional summary that highlights the candidate's most relevant qualifications for this specific role.
-         - For experience descriptions: Rephrase the bullet points to use keywords and action verbs from the job description. Quantify achievements where possible and emphasize results that match the employer's needs.
+         - For experience descriptions: Rephrase the bullet points to use keywords and action verbs from the job description. Quantify achievements where possible and emphasize results that match the employer's needs. Ensure all bullet points start with '*'.
          - Do not change any other part of the resume JSON. Return the entire modified JSON object."""),
         ("user", "Here is the current resume:\n\n{resume}\n\nHere is the job description:\n\n{job_post}"),
         ("system", "Please provide the updated resume in JSON format only.")
@@ -162,7 +164,7 @@ if generate_button:
     elif not uploaded_pdf:
         st.error("Please upload your profile or resume PDF.")
     else:
-        llm = ChatGroq(temperature=0.2, groq_api_key=groq_api_key, model_name="openai/gpt-oss-20b")
+        llm = ChatGroq(temperature=0.2, groq_api_key=groq_api_key, model_name="llama3-70b-8192")
         
         # 1. Extract text from PDF
         document_text = extract_text_from_pdf(uploaded_pdf)

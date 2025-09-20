@@ -10,10 +10,15 @@ from langchain_core.output_parsers import JsonOutputParser
 # --- Constants & Page Config ---
 FONT_FAMILY = "Helvetica"
 st.set_page_config(
-    page_title="PragyanAI - AI Resume Co-pilot",
+    page_title="AI Resume Co-pilot",
     page_icon="📄",
     layout="wide"
 )
+
+# --- Helper function to safely encode text ---
+def clean_text(text):
+    """Encodes text to latin-1, replacing unsupported characters."""
+    return str(text).replace('\r', '').encode('latin-1', 'replace').decode('latin-1')
 
 # --- PDF Generation Class ---
 
@@ -26,49 +31,41 @@ class PDF(FPDF):
         
     def add_section_title(self, title):
         self.set_font(FONT_FAMILY, 'B', 14)
-        safe_title = title.encode('latin-1', 'replace').decode('latin-1')
-        self.cell(0, 10, safe_title.upper(), 0, 1, 'L')
-        self.ln(2) # Add a little space after the title
+        self.cell(0, 10, clean_text(title).upper(), 0, 1, 'L')
+        self.ln(2)
 
     def add_body_text(self, text):
         self.set_font(FONT_FAMILY, '', 11)
-        safe_text = text.encode('latin-1', 'replace').decode('latin-1')
-        self.multi_cell(0, 5, safe_text)
+        self.multi_cell(0, 5, clean_text(text))
         self.ln(4)
 
     def add_experience(self, exp_list):
         for exp in exp_list:
             self.set_font(FONT_FAMILY, 'B', 11)
             title_company = f"{exp.get('title', '')} at {exp.get('company', '')}"
-            safe_title_company = title_company.encode('latin-1', 'replace').decode('latin-1')
-            self.multi_cell(0, 5, safe_title_company)
+            self.multi_cell(0, 5, clean_text(title_company))
 
             self.set_font(FONT_FAMILY, 'I', 10)
             duration = f"{exp.get('duration', '')}"
-            safe_duration = duration.encode('latin-1', 'replace').decode('latin-1')
-            self.multi_cell(0, 5, safe_duration)
+            self.multi_cell(0, 5, clean_text(duration))
             
             self.set_font(FONT_FAMILY, '', 11)
-            # Handle bullet points in description, replacing special characters
-            description = exp.get('description', '').replace('•', '*')
+            description = str(exp.get('description', '')).replace('•', '*')
             for point in description.split('*'):
                 point = point.strip()
                 if point:
-                    safe_point = f"* {point}".encode('latin-1', 'replace').decode('latin-1')
-                    self.multi_cell(0, 5, safe_point)
+                    self.multi_cell(0, 5, clean_text(f"* {point}"))
             self.ln(3)
 
     def add_education(self, edu_list):
         for edu in edu_list:
             self.set_font(FONT_FAMILY, 'B', 11)
             institution = edu.get('institution', '')
-            safe_institution = institution.encode('latin-1', 'replace').decode('latin-1')
-            self.multi_cell(0, 5, safe_institution)
+            self.multi_cell(0, 5, clean_text(institution))
 
             self.set_font(FONT_FAMILY, '', 11)
             degree_duration = f"{edu.get('degree', '')} ({edu.get('duration', '')})"
-            safe_degree_duration = degree_duration.encode('latin-1', 'replace').decode('latin-1')
-            self.multi_cell(0, 5, safe_degree_duration)
+            self.multi_cell(0, 5, clean_text(degree_duration))
             self.ln(3)
 
 # --- Core Functions ---
@@ -123,7 +120,7 @@ def customize_resume_for_job(_llm, resume_data, job_description):
 
 # --- Streamlit UI ---
 
-st.title("📄 PragyanAI - AI Resume Co-pilot")
+st.title("📄 AI Resume Co-pilot")
 st.write("Generate a professional resume from your LinkedIn profile or existing resume and tailor it to a specific job in seconds.")
 
 # --- Session State Initialization ---
@@ -228,13 +225,11 @@ if st.session_state.resume_data:
     
     # Header section
     pdf.set_font(FONT_FAMILY, 'B', 24)
-    safe_name = resume.get('name', 'Your Name').encode('latin-1', 'replace').decode('latin-1')
-    pdf.cell(0, 10, safe_name, 0, 1, 'C')
+    pdf.cell(0, 10, clean_text(resume.get('name', 'Your Name')), 0, 1, 'C')
 
     pdf.set_font(FONT_FAMILY, '', 10)
     contact_str = f"{resume['contact'].get('email', '')} | {resume['contact'].get('phone', '')} | {resume['contact'].get('linkedin_url', '')}"
-    safe_contact_str = contact_str.encode('latin-1', 'replace').decode('latin-1')
-    pdf.cell(0, 10, safe_contact_str, 0, 1, 'C')
+    pdf.cell(0, 10, clean_text(contact_str), 0, 1, 'C')
     pdf.ln(5)
 
     # Summary
@@ -261,3 +256,4 @@ if st.session_state.resume_data:
         file_name=f"{resume.get('name', 'resume').replace(' ', '_').lower()}_resume.pdf",
         mime="application/pdf"
     )
+    
